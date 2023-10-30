@@ -15,6 +15,8 @@ interface Marker {
 interface MapState {
   currentLat: number
   currentLng: number
+  currentTimezone: string
+  currentLocationTime: string
   markers: Array<Marker>
   currentPage: number
 }
@@ -22,6 +24,8 @@ const ROWS_PER_PAGE = 10 as const
 const state: MapState = reactive({
   currentLat: 0,
   currentLng: 0,
+  currentTimezone: '',
+  currentLocationTime: '',
   markers: [],
   // markers: Array.from({ length: 90 }, (_, i) => ({
   //   id: uuidv4(),
@@ -64,12 +68,30 @@ function addMarker(lat: number, lng: number, formattedAddress: string) {
 
 // setPlace
 function setPlace(place: google.maps.GeocoderResult) {
+  // console.log('place', place)
   const latitude = place.geometry.location.lat(),
     longitude = place.geometry.location.lng(),
     formattedAddress = place.formatted_address
   state.currentLat = latitude
   state.currentLng = longitude
   addMarker(latitude, longitude, formattedAddress)
+
+  fetch(
+    `https://maps.googleapis.com/maps/api/timezone/json?location=${latitude},${longitude}&timestamp=${Math.floor(
+      Date.now() / 1000
+    )}&key=${import.meta.env.VITE_GOOGLE_MAP_API_KEY}`
+  )
+    .then((res) => res.json())
+    .then((response) => {
+      // console.log("User's Location Info: ", response)
+      state.currentTimezone = response.timeZoneId
+      state.currentLocationTime = new Date(
+        (Math.floor(Date.now() / 1000) + response.dstOffset + response.rawOffset) * 1000
+      ).toUTCString()
+    })
+    .catch((status) => {
+      console.log('Request failed.  Returned status of', status)
+    })
 }
 
 // deleteMarkerByIds
@@ -116,6 +138,11 @@ function getMarkerByPaging() {
         <Button @click="getCurrentLocation">Get Current Location</Button>
       </div>
 
+      <div>
+        <p>Timezone:{{ state.currentTimezone }}</p>
+        <p>Local time:{{ state.currentLocationTime }}</p>
+      </div>
+
       <div class="tableActionContainer">
         <Button @click="deleteMarkerByIds">Delete Selected Record</Button>
         <Paginator
@@ -136,7 +163,7 @@ function getMarkerByPaging() {
           <td>
             <Checkbox v-model="marker.checked" :binary="true" />
           </td>
-          <td>{{ marker.formattedAddress }} {{ marker.id }}</td>
+          <td>{{ marker.formattedAddress }}</td>
           <td>{{ marker.lat }}</td>
           <td>{{ marker.lng }}</td>
         </tr>
